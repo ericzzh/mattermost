@@ -458,9 +458,9 @@ func NewServer(options ...Option) (*Server, error) {
 	}
 	s.EmailService = emailService
 
-	if model.BuildEnterpriseReady == "true" {
-		s.LoadLicense()
-	}
+	// if model.BuildEnterpriseReady == "true" { // ZZH Del
+	s.LoadLicense()
+	// } // ZZH Del
 
 	s.setupFeatureFlags()
 
