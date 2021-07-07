@@ -17,6 +17,8 @@ import (
 	"github.com/mattermost/mattermost-server/v6/model"
 	"github.com/mattermost/mattermost-server/v6/shared/mlog"
 	"github.com/mattermost/mattermost-server/v6/utils"
+	// ZZH ADD
+	"io/ioutil"
 )
 
 const (
@@ -35,6 +37,22 @@ type JWTClaims struct {
 }
 
 func (s *Server) LoadLicense() {
+	// ZZH ADD Begin
+	ourVersion := os.Getenv("ZZH_IF_OURS")
+	mlog.Info("***********ZZH MOD*********  ZZH_IF_OURS: " + ourVersion)
+	if ourVersion == "true" {
+		mockLicensePath := os.Getenv("ZZH_MOCK_LIC_PATH")
+		mlog.Info("***********ZZH MOD*********  ZZH_MOCK_LIC_PATH: " + mockLicensePath)
+		mockLicenseStr, err := ioutil.ReadFile(mockLicensePath)
+		if err != nil {
+			mlog.Info("***********ZZH MOD*********  Mock Licnese can't be read")
+			return
+		}
+		license := model.LicenseFromJson(strings.NewReader(string(mockLicenseStr)))
+		s.SetLicense(license)
+		return
+	}
+	// ZZH ADD End
 	// ENV var overrides all other sources of license.
 	licenseStr := os.Getenv(LicenseEnv)
 	if licenseStr != "" {
