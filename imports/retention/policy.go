@@ -1,8 +1,22 @@
 // retention is a self implemented data retention solution
-// It's very simple, but to resolve our basic requirement.
+// It's very simple, but hope to resolve our basic requirement.
+// 
+// *. Default rentention rule follows the config setting
+// *. Specific rentention rule is defined in a server csv file
+//       type:    team/channel/direct
+//       id:      team/channel ID/usrid(direct message, mainly a bot)
+//       name:    for human reading
+//       period:  retention period
+// *. Pinned and user saved messsages won't be deleted.
+// *. Message and its thread is a whole, which means unless the last date of the last thread of a message is expired,
+//    the whole chats won't be deleted.
+// *. If all the file in a directory are deleted, the fold will be delete too
+
+// #  Some idea: 
+// #  Set a trash bin and then permanently deleted? 
 //
 // Mattermost job system memo v5.35
-// Jobserver
+//    Jobserver: Like a platform providing tools
 //    Watch:     Poll and notify Works every 15 secs
 //               Check the job DB and find any pending jobs
 //               send the job to specific job channel( return from Worker.JobChannel())
@@ -30,7 +44,6 @@ package retention
 import (
 	"github.com/mattermost/mattermost-server/v5/app"
 	"github.com/mattermost/mattermost-server/v5/einterfaces"
-	// ejobs "github.com/mattermost/mattermost-server/v5/einterfaces/jobs"
 	"github.com/mattermost/mattermost-server/v5/model"
 )
 
