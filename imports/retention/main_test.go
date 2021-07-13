@@ -12,6 +12,11 @@ import (
 var replicaFlag bool
 
 // export MM_SERVER_PATH=~/go/src/mattermost-server
+// export MM_SQLSETTINGS_DRIVERNAME=mysql
+// source ./set_env.sh && go test -v
+
+var mainHelper *testlib.MainHelper
+
 func TestMain(m *testing.M) {
 	if f := flag.Lookup("mysql-replica"); f == nil {
 		flag.BoolVar(&replicaFlag, "mysql-replica", false, "")
@@ -25,13 +30,11 @@ func TestMain(m *testing.M) {
 	}
 
 	mlog.DisableZap()
-        mlog.Debug("Entering TestMain 1")
 
-        mainHelper := testlib.NewMainHelperWithOptions(&options)
+        mainHelper = testlib.NewMainHelperWithOptions(&options)
         api4.SetMainHelper(mainHelper)
 	defer mainHelper.Close()
 
-        mlog.Debug("Entering TestMain 2")
 
 	mainHelper.Main(m)
 }
