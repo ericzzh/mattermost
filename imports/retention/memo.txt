@@ -1,0 +1,35 @@
+select * from Posts where CreateAt >= 1626229436758  order by CreateAt Desc, UpdateAt Desc  limit 10;
+select Id,CreatorId,PostId,CreateAt,UpdateAt,DeleteAt,Path,ThumbnailPath,PreviewPath,Name,Extension,Size,MimeType,Width,Height,HasPreviewImage,MiniPreview,RemoteId from FileInfo;
+
+
+* Root message's UpdateAt will be update to last thread creation time
+* Reaction:
+    * won't update the root message's UpdateAt
+    * update self's UpdateAt to current time
+    * Delete emotion will set DeleteAt in Reaction and UpdateAt of emotion's post
+* Delete
+    * won't update the root's UpdateAt
+    * Update DeleteAt to current time
+    * Update UpdateAt to current time
+* File will be grouped in []
+    * Pin a message will:
+    * root's UpdateAt will be set to current
+    * copy a "deleted" message and set the OriginalId to the pinned message
+    * set UpdateAt to current( CreateAt will be same as original)
+    * Set the original message's IsPin to 1
+    * set the original message's UpdateAt to current
+* Unpined a message will:
+    * root's UpdateAt will be set to current
+    * copy a "deleted" message and set the OriginalId to the unpinned(original) message
+    * set UpdateAt to current( CreateAt will be same as original)
+    * Set the original message's IsPin to 0
+    * set the original message's UpdateAt to current
+* Mark unread
+    * will not update anything in Posts
+
+Need to update:
+FileInfo
+Posts
+Reactions
+ThreadMemberships
+Threads

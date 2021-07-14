@@ -47,6 +47,8 @@
 package retention
 
 import (
+	"time"
+
 	"github.com/mattermost/mattermost-server/v5/app"
 	"github.com/mattermost/mattermost-server/v5/einterfaces"
 	"github.com/mattermost/mattermost-server/v5/model"
@@ -61,15 +63,16 @@ const SIMPLE_RETENTION_KIND_CHANNEL = "Channel"
 const SIMPLE_RETENTION_KIND_USER = "User"
 
 type SimplePolicy struct {
-	period   int64
-	specific []SimpleSpecificPolicy
+	period  time.Duration
+	team    []SimpleSpecificPolicy
+	channel []SimpleSpecificPolicy
+	direct  []SimpleSpecificPolicy
 }
 
 type SimpleSpecificPolicy struct {
-	kind   string
 	id     string
 	name   string
-	period int64 // 0: indefinetly, seconds, input is days, should convert to second
+	period time.Duration // 0: indefinetly, seconds, input is days, should convert to second
 }
 
 var policy SimplePolicy
