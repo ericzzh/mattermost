@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func TestMyTest(t *testing.T) {
+func __TestMyTest(t *testing.T) {
 
 	th := api4.Setup(t)
 	defer th.TearDown()
         th.Server.Config().SqlSettings.DataSource = mainHelper.Settings.DataSource
-	Prune(th.Server)
+	Prune(th.App)
 }

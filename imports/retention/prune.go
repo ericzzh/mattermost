@@ -1,24 +1,27 @@
 package retention
 
 import (
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
 
 	"github.com/mattermost/mattermost-server/v5/app"
 	"github.com/mattermost/mattermost-server/v5/model"
 	"github.com/mattermost/mattermost-server/v5/shared/mlog"
+	"github.com/pkg/errors"
+
+	"time"
 
 	"github.com/mattermost/mattermost-server/v5/store/sqlstore"
-	"time"
 )
 
 func Prune(a *app.App) error {
 
 	s := a.Srv()
-	st, _ := json.Marshal(s.Config().SqlSettings)
-	mlog.Debug(string(st))
+	// st, _ := json.Marshal(s.Config().SqlSettings)
+	// mlog.Debug(string(st))
 
 	ss := sqlstore.New(s.Config().SqlSettings, nil)
+        pruneGeneral(ss)
 
 	// var posts []*model.Post
 	// var fetchQuery string
@@ -67,11 +70,23 @@ func Prune(a *app.App) error {
 func pruneGeneral(ss *sqlstore.SqlStore) error {
 
 	now := time.Now()
-	endTime := now.Add(-time.Second * policy.period)
+	endTime := model.GetMillisForTime(now.Add(-time.Second * policy.period))
+        mlog.Debug(fmt.Sprintf("endTime: %v", endTime))
 	var posts []*model.Post
 
-	ss.GetMaster().Select(&posts, `Select * From Posts Where UpdateAt < :EndTime`,
+	_, err := ss.GetMaster().Select(&posts, `
+                Select * From Posts 
+                Where UpdateAt < :EndTime
+                  And RootId = ""
+                  And IsPinned <> 1`,
 		map[string]interface{}{"EndTime": endTime})
+	if err != nil {
+		return errors.Wrapf(err, "failed to fetch all the general candidate posts.")
+	}
+        mlog.Debug(fmt.Sprintf("len:%v", len(posts)))
+	for _, post := range posts {
+		mlog.Debug(fmt.Sprintf("Prune: find a post Id %v, Message: %v", post.Id, post.Message))
+	}
 
 	return nil
 
