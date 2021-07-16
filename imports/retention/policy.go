@@ -64,16 +64,12 @@ const SIMPLE_RETENTION_KIND_USER = "User"
 
 type SimplePolicy struct {
 	period  time.Duration
-	team    []SimpleSpecificPolicy
-	channel []SimpleSpecificPolicy
-	direct  []SimpleSpecificPolicy
+	team    SimpleSpecificPolicy
+	channel SimpleSpecificPolicy
+	user  SimpleSpecificPolicy
 }
 
-type SimpleSpecificPolicy struct {
-	id     string
-	name   string
-	period time.Duration // 0: indefinetly, seconds, input is days, should convert to second
-}
+type SimpleSpecificPolicy map[string]time.Duration 
 
 var policy SimplePolicy
 
