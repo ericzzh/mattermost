@@ -3,7 +3,6 @@ package retention
 import (
 	// "encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"database/sql"
@@ -19,69 +18,131 @@ import (
 	"github.com/mattermost/mattermost-server/v5/store/sqlstore"
 )
 
-type Pruner struct {
+type Prune struct {
 	app      *app.App
 	srv      *app.Server
 	sqlstore *sqlstore.SqlStore
+	merged   SimpleSpecificPolicy
 }
 
-func New(a *app.App) *Pruner {
+func New(a *app.App) (*Prune, error) {
 
 	s := a.Srv()
 	// st, _ := json.Marshal(s.Config().SqlSettings)
 	// mlog.Debug(string(st))
 
 	ss := sqlstore.New(s.Config().SqlSettings, nil)
-
-	return &Pruner{
+	merged, err := mergeToChannels(s)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Prune: call mergeToChannels wrong.")
+	}
+	return &Prune{
 		app:      a,
 		srv:      s,
 		sqlstore: ss,
-	}
+		merged:   merged,
+	}, nil
 
 }
+func mergeToChannels(srv *app.Server) (mergedChMap SimpleSpecificPolicy, err error) {
+	//from specific case the general case
 
-func (pr *Pruner) PruneGeneral() error {
-	plies, err := pr.getTeamAsChannels()
-	if err != nil {
-		return err
+	mergedChMap = SimpleSpecificPolicy{}
+	// channels specific rules
+	for k, p := range policy.channel {
+		mlog.Debug(fmt.Sprintf("Prune: merging channel %s, period %d", k, p))
+		mergedChMap[k] = p
 	}
-	ex := pr.fetchAllChannelIds(plies)
 
-	if err := pr.pruneActions(nil, ex, policy.period); err != nil {
-		return errors.Wrapf(err, "failed to execute PruneGeneral()")
+	// user directed channel
+	for u, p := range policy.user {
+                usr, err := srv.Store.User().GetByUsername(u)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Prune: get user(%s) id wrong.", u)
+		}
+		chs, err := srv.Store.Channel().GetChannels("", usr.Id, true, 0)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Prune: get user(%s) direct channel wrong.", u)
+		}
+
+		for _, ch := range *chs {
+			mlog.Debug(fmt.Sprintf("Prune: merging user %s channel %s, period %d", u, ch.Id, p))
+			mergedChMap[ch.Id] = p
+
+		}
+	}
+
+	// teams channel
+	// mlog.Debug(fmt.Sprintf("Prune: teams %v", policy.team))
+	for k, p := range policy.team {
+
+		chs, err := srv.Store.Channel().GetTeamChannels(k)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to call GetTeamChannels()")
+		}
+
+		// mlog.Debug(fmt.Sprintf("Prune: print all team %v, channels. %v", k, *chs))
+		for _, ch := range *chs {
+			// not overwrite the specific channel
+			if _, ok := mergedChMap[ch.Id]; !ok {
+				mlog.Debug(fmt.Sprintf("Prune: merging team %s channel %s, period %d", k, ch.Id, p))
+				mergedChMap[ch.Id] = p
+			}
+
+		}
+	}
+
+	return mergedChMap, nil
+}
+func (pr *Prune) Prune() error {
+
+	mlog.Debug("Prune: Staring prune channel posts.")
+	if err := pr.pruneGeneral(); err != nil {
+		return errors.Wrapf(err, "Prune: call Prune wrong.")
+	}
+
+	mlog.Debug("Prune: general case completed.")
+
+	for chid, p := range pr.merged {
+
+		if p != 0 {
+
+			if err := pr.pruneActions(false, []string{chid}, nil, p); err != nil {
+				return errors.Wrapf(err, "failed to call pruneActions().")
+			}
+			mlog.Debug(fmt.Sprintf("Prune: specific case, channel: %s, completed.", chid))
+		} else {
+			// Only clean deleted record.
+			if err := pr.pruneActions(true, []string{chid}, nil, p); err != nil {
+				return errors.Wrapf(err, "failed to call pruneActions().")
+			}
+			mlog.Debug(fmt.Sprintf("Prune: pemanet case only cleaning deleted posts, channel: %s, completed.", chid))
+		}
+
+	}
+	return nil
+
+}
+func (pr *Prune) pruneGeneral() error {
+	ex := pr.fetchAllChannelIds(pr.merged)
+
+	if err := pr.pruneActions(false, nil, ex, policy.period); err != nil {
+		return errors.Wrapf(err, "failed to call pruneActions().")
 	}
 
 	return nil
 }
 
-func (pr *Pruner) merge{}
-
-func (pr *Pruner) getUsersAsChannels(id string) (plies SimpleSpecificPolicy, err error) {
-	return nil, nil
-}
-func (pr *Pruner) getTeamAsChannels(id string) (plies SimpleSpecificPolicy, err error) {
-
-	plies = make(SimpleSpecificPolicy)
-
-	chs, err := pr.srv.Store.Channel().GetTeamChannels(id)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to call GetTeamChannels()")
-	}
-	for _, ch := range []*model.Channel(*chs) {
-		plies[ch.Id] = policy.team[id]
+func (pr *Prune) fetchAllChannelIds(chsMap SimpleSpecificPolicy) (chIds []string) {
+	for id := range chsMap {
+		chIds = append(chIds, id)
 
 	}
-
-	return plies, nil
+	return chIds
 }
 
-func (pr *Pruner) fetchAllChannelIds(plies SimpleSpecificPolicy) []string {
-
-	return nil
-}
-
-func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) error {
+// TO DO: Only select necessary fields
+func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Duration) error {
 
 	ss := pr.sqlstore
 
@@ -103,16 +164,28 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 
 	builder := getQueryBuilder(ss)
 	sql := builder.Select("*").From("Posts")
+
 	if ch != nil {
 		sql = sql.Where(sq.Eq{"ChannelId": ch})
 	}
 
-	// OriginalId is not a key, so fetching the sub-root using this OriginalId is not perfomant, we left them out
-	sql = sql.Where("UpdateAt < ?", endTime).Where("RootId = ?", "").Where(
-		"IsPinned <> ?", 1) //.Where("OriginalId = ?", "")
+	sql = sql.Where("UpdateAt < ?", endTime)
 
-	if ex != nil {
-		sql = sql.Where(sq.NotEq{"ChannelId": ex})
+	if del {
+		// Only clean the Deleted post in  pemanent channls
+		// To follow the root -> thread logic, we only fetch the deleted root
+		// and threads fetch follows the same logic
+		// This logic works because if a root is deleted ,all the subsequent thread will also be deleted.
+		// No pinned filtered out, all should be cleaned
+		sql = sql.Where("RootId = '' AND DeleteAt <> 0")
+	} else {
+		// OriginalId is not a key, so fetching the sub-root using this OriginalId is not perfomant, we left them out
+		// We should aslo fetch the deleted root id
+		sql = sql.Where("(RootId = '' AND IsPinned = 0 AND DeleteAt = 0 ) OR (RootId ='' AND DeleteAt <> 0)") //.Where("OriginalId = ?", "")
+
+		if ex != nil {
+			sql = sql.Where(sq.NotEq{"ChannelId": ex})
+		}
 	}
 
 	sqlstr, args, err := sql.ToSql()
@@ -138,16 +211,21 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	// using ROOTID and ORIGINIALID
 	// We should also filter all the DeletedAt field to fetch the active posts
 	// We can't use the Deleted record to justify.
+	chMap := map[string]bool{}
 	rootsid := make([]string, 0)
 	for _, root := range roots {
 		//  Thread is not link to sub-root
 		if root.OriginalId == "" {
 			rootsid = append(rootsid, root.Id)
+			// save the channel
+			// Don't neend to save thread's channel, because they must be the same
+			chMap[root.ChannelId] = true
 		}
 	}
 
-	builder = getQueryBuilder(ss)
-	sql = builder.Select("*").From("Posts").Where(sq.Or{sq.Eq{"RootId": rootsid}, sq.Eq{"OriginalId": rootsid}})
+	//
+	// sql = builder.Select("*").From("Posts").Where(sq.Or{sq.Eq{"RootId": rootsid}, sq.Eq{"OriginalId": rootsid}})
+	sql = builder.Select("*").From("Posts").Where(sq.Eq{"RootId": rootsid})
 	sqlstr, args, err = sql.ToSql()
 	if err != nil {
 		return errors.Wrapf(err, "failed to build candidate threads fetching sql string.")
@@ -224,7 +302,7 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	}
 
 	var fileInfos []*model.FileInfo
-	sql = sq.Select("*").From("FileInfo").Where(sq.Eq{"Id": fileids})
+	sql = builder.Select("*").From("FileInfo").Where(sq.Eq{"Id": fileids})
 	sqlstr, args, err = sql.ToSql()
 	if err != nil {
 		return errors.Wrapf(err, "failed to build fileid fetching sql string.")
@@ -238,7 +316,7 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	mlog.Debug(fmt.Sprintf("Prune: file id counts :%v", len(fileInfos)))
 
 	//----------------------------------------
-	//  Delete process
+	//  Deleting process
 	//----------------------------------------
 
 	transaction, err := ss.GetMaster().Begin()
@@ -256,7 +334,7 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	for id := range reactionMap {
 		reactionIds = append(reactionIds, id)
 	}
-	query, args, err := sq.Delete("Reactions").Where(sq.Eq{"Id": reactionIds}).ToSql()
+	query, args, err := builder.Delete("Reactions").Where(sq.Eq{"Id": reactionIds}).ToSql()
 
 	if err != nil {
 		return errors.Wrapf(err, "failed to build delete from Reaction query string.")
@@ -271,7 +349,7 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	//****************************************
 	// ThreadMembership deletion
 	//****************************************
-	query, args, err = sq.Delete("ThreadMemberShips").Where(sq.Eq{"Id": rootsid}).ToSql()
+	query, args, err = builder.Delete("ThreadMemberShips").Where(sq.Eq{"Id": rootsid}).ToSql()
 
 	if err != nil {
 		return errors.Wrapf(err, "failed to build delete from ThreadMemberShips query string.")
@@ -286,7 +364,7 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	//****************************************
 	// Threads deletion
 	//****************************************
-	query, args, err = sq.Delete("Threads").Where(sq.Eq{"Id": rootsid}).ToSql()
+	query, args, err = builder.Delete("Threads").Where(sq.Eq{"Id": rootsid}).ToSql()
 
 	if err != nil {
 		return errors.Wrapf(err, "failed to build delete from Threads query string.")
@@ -301,7 +379,7 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	//****************************************
 	// FileInfo deletion
 	//****************************************
-	query, args, err = sq.Delete("FileInfo").Where(sq.Eq{"Id": fileids}).ToSql()
+	query, args, err = builder.Delete("FileInfo").Where(sq.Eq{"Id": fileids}).ToSql()
 
 	if err != nil {
 		return errors.Wrapf(err, "failed to build delete from FileInfo query string.")
@@ -316,7 +394,7 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	//****************************************
 	// Preferences deletion
 	//****************************************
-	query, args, err = sq.Delete("Preferences").Where(sq.And{sq.Eq{"Name": delIds}, sq.Eq{"Category": "flagged_post"}}).ToSql()
+	query, args, err = builder.Delete("Preferences").Where(sq.And{sq.Eq{"Name": delIds}, sq.Eq{"Category": "flagged_post"}}).ToSql()
 
 	if err != nil {
 		return errors.Wrapf(err, "failed to build delete from Preferences query string.")
@@ -331,7 +409,7 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	//****************************************
 	// Posts deletion
 	//****************************************
-	query, args, err = sq.Delete("Posts").Where(sq.Eq{"Id": delIds}).ToSql()
+	query, args, err = builder.Delete("Posts").Where(sq.Eq{"Id": delIds}).ToSql()
 
 	if err != nil {
 		return errors.Wrapf(err, "failed to build delete from Posts query string.")
@@ -355,9 +433,33 @@ func (pr *Pruner) pruneActions(ch []string, ex []string, period time.Duration) e
 	for _, fileInfo := range fileInfos {
 		// the Dir of the path is the file id ,every file should have a individual id
 		path := filepath.Dir(fileInfo.Path)
-		if err = os.RemoveAll(path); err != nil {
+		if err = pr.app.RemoveDirectory(path); err != nil {
 			mlog.Error(fmt.Sprintf("Prune: failed to delete file %s", path), mlog.Err(err))
 		}
+
+		for {
+
+			path = filepath.Dir(path)
+
+			if path == "." {
+				break
+			}
+
+			fs, err := pr.app.ListDirectory(path)
+			if err = pr.app.RemoveDirectory(path); err != nil {
+				mlog.Error(fmt.Sprintf("Prune: failed to delete file %s", path), mlog.Err(err))
+			}
+			if len(fs) == 0 {
+				pr.app.RemoveDirectory(path)
+			} else {
+				break
+			}
+		}
+	}
+
+	for chId := range chMap {
+		pr.srv.Store.Channel().InvalidatePinnedPostCount(chId)
+		pr.srv.Store.Post().InvalidateLastPostTimeCache(chId)
 	}
 
 	return nil

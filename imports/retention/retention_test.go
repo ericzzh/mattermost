@@ -1,7 +1,8 @@
 package retention
 
 import (
-	"strconv"
+	"fmt"
+	// "strconv"
 	"testing"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 	"github.com/mattermost/mattermost-server/v5/model"
 	// 	// "github.com/mattermost/mattermost-server/v5/store"
 	"github.com/mattermost/mattermost-server/v5/api4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Enviroment setup
@@ -37,42 +40,31 @@ import (
 //    Y <- Z,V specific situation
 //    Z <- X,W permanent situation
 //
-// Data setup( following a specifical function call )
-// General retention period 5 seconds
-// Specific team retention period 3 seconds
-// Specific channel retention period 1 seconds
-// Specific user direct message 3 seconds
-// Permanent period = ""
-//
-// Root messages
-// U send 7 root messages to all channels(interval 1 second)
-// Some message is pinned( better first serveral message )
-// Odd message will attach a file
-// Call retention method
-// Expect all messages' time left in the channels are right
-// Expect all deleted messages' file is deleted
-// Expect all pinned message is not deleted
-//
-// Thread messages
-// U send 7 theads ( 1 root + 6 threads) to all channels(interval 1 second)
-// some message is pinned
-// some message is not pinned but its thread is pinned
-// Call retention method
-// Wait extra 3 seconds
-// All left message should be with all threads
-// Wait extra 3 seconds
-// All message and threads should be deleted
-// All files with deleted message should be removed
-// All Pinned message as a whole ( root + thread) should be left
+// Cases
+// root
+// root witn threads
+// pinned root
+// pinned thread
+// root witn threads, some with files
+// All deleted
+// pined/unpined some tines
+// edit some times
+// react some times
+// flag some post
+// permanent with some deletion
+// rule merge
+// general case(all channels include)
+// specific case(some channel icnluded)
+// empty folder after remove, unempty folder after removal
 
-func TestRention(t *testing.T) {
+func TestRetention(t *testing.T) {
 
 	th := api4.Setup(t)
 	defer th.TearDown()
 	th.Server.Config().SqlSettings.DataSource = mainHelper.Settings.DataSource
 	Client := th.Client
 
-	// X := th.SystemAdminUser
+	X := th.SystemAdminUser
 	Y := th.SystemManagerUser
 	Z := th.TeamAdminUser
 	U := th.BasicUser
@@ -102,100 +94,133 @@ func TestRention(t *testing.T) {
 
 	B := th.CreateTeam()
 	th.LinkUserToTeam(U, B)
-	// 	th.LinkUserToTeam(V, B)
-	// 	th.LinkUserToTeam(W, B)
-	// 	B_1 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_OPEN, B.Id)
-	// 	th.App.AddUserToChannel(U, B_1, false)
-	// 	th.App.AddUserToChannel(V, B_1, false)
-	// 	th.App.AddUserToChannel(W, B_1, false)
-	// 	B_2 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_PRIVATE, B.Id)
-	// 	th.App.AddUserToChannel(U, B_2, false)
-	// 	th.App.AddUserToChannel(V, B_2, false)
-	// 	th.App.AddUserToChannel(W, B_2, false)
+	th.LinkUserToTeam(V, B)
+	th.LinkUserToTeam(W, B)
+	B_1 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_OPEN, B.Id)
+	th.App.AddUserToChannel(U, B_1, false)
+	th.App.AddUserToChannel(V, B_1, false)
+	th.App.AddUserToChannel(W, B_1, false)
+	B_2 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_PRIVATE, B.Id)
+	th.App.AddUserToChannel(U, B_2, false)
+	th.App.AddUserToChannel(V, B_2, false)
+	th.App.AddUserToChannel(W, B_2, false)
 	B_3 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_PRIVATE, B.Id)
-	// 	th.App.AddUserToChannel(U, B_3, false)
-	// 	th.App.AddUserToChannel(V, B_3, false)
+	th.App.AddUserToChannel(U, B_3, false)
+	th.App.AddUserToChannel(V, B_3, false)
 	th.App.AddUserToChannel(W, B_3, false)
-	//
+
 	C := th.CreateTeam()
 	th.LinkUserToTeam(U, C)
-	// 	th.LinkUserToTeam(V, C)
-	// th.LinkUserToTeam(W, C)
-	// 	C_1 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_OPEN, C.Id)
-	// 	th.App.AddUserToChannel(U, C_1, false)
-	// 	th.App.AddUserToChannel(V, C_1, false)
-	// 	th.App.AddUserToChannel(W, C_1, false)
-	// 	C_2 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_PRIVATE, C.Id)
-	// 	th.App.AddUserToChannel(U, C_2, false)
-	// 	th.App.AddUserToChannel(V, C_2, false)
-	// 	th.App.AddUserToChannel(W, C_2, false)
+	th.LinkUserToTeam(V, C)
+	th.LinkUserToTeam(W, C)
+	C_1 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_OPEN, C.Id)
+	th.App.AddUserToChannel(U, C_1, false)
+	th.App.AddUserToChannel(V, C_1, false)
+	th.App.AddUserToChannel(W, C_1, false)
+	C_2 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_PRIVATE, C.Id)
+	th.App.AddUserToChannel(U, C_2, false)
+	th.App.AddUserToChannel(V, C_2, false)
+	th.App.AddUserToChannel(W, C_2, false)
 	C_3 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_PRIVATE, C.Id)
-	// 	th.App.AddUserToChannel(U, C_3, false)
-	// 	th.App.AddUserToChannel(V, C_3, false)
+	th.App.AddUserToChannel(U, C_3, false)
+	th.App.AddUserToChannel(V, C_3, false)
 	th.App.AddUserToChannel(W, C_3, false)
-	//
-	// 	CreateDmChannel(th, X, Y)
-	// 	CreateDmChannel(th, X, U)
-	//
-	// 	CreateDmChannel(th, Y, Z)
-	// 	CreateDmChannel(th, Y, V)
-	//
-	// 	CreateDmChannel(th, Z, X)
-	// 	CreateDmChannel(th, Z, W)
 
-	SetPolicy(SimplePolicy{
-		period: 1,
-		team: []SimpleSpecificPolicy{
-			{B.Id, "special team B", 3},
-			{C.Id, "permanent team C", 0},
-		},
-		channel: []SimpleSpecificPolicy{
-			{A_1.Id, "specific channel A_1", 1},
-			{A_2.Id, "permanent channel A_2", 0},
-		},
-		direct: []SimpleSpecificPolicy{
-			{Y.Username, "specific channel A_1", 1},
-			{Z.Username, "permanent channel A_2", 0},
-		},
-		// specific: []SimpleSpecificPolicy{
-		// 	{SIMPLE_RETENTION_KIND_TEAM, B.Id, "special team B", 3}},
-		// 	{SIMPLE_RETENTION_KIND_TEAM, C.Id, "permanent team C", 0},
-		// 	{SIMPLE_RETENTION_KIND_CHANNEL, A_1.Id, "specific channel A_1", 1},
-		// 	{SIMPLE_RETENTION_KIND_CHANNEL, B_1.Id, "specific channel B_1", 1},
-		// 	{SIMPLE_RETENTION_KIND_CHANNEL, C_1.Id, "specific channel C_1", 1},
-		// 	{SIMPLE_RETENTION_KIND_CHANNEL, A_2.Id, "permanent channel A_2", 0},
-		// 	{SIMPLE_RETENTION_KIND_CHANNEL, B_2.Id, "permanent channel B_2", 0},
-		// 	{SIMPLE_RETENTION_KIND_CHANNEL, C_2.Id, "permanent channel C_2", 0},
-		// 	{SIMPLE_RETENTION_KIND_USER, Y.Username, "specific user Y", 3},
-		// 	{SIMPLE_RETENTION_KIND_USER, Z.Username, "permanent user Z", 0},
-		// },
-	})
-	t.Run("testing gernal case", func(t *testing.T) {
+	CreateDmChannel(th, X, Y)
+	CreateDmChannel(th, X, U)
 
-		const POSTS_COUNTS = 7
+	CreateDmChannel(th, Y, Z)
+	CreateDmChannel(th, Y, V)
 
-		U.Password = "Pa$$word11"
-		LoginWithClient(U, Client)
+	CreateDmChannel(th, Z, X)
+	CreateDmChannel(th, Z, W)
 
-		for i := 0; i < POSTS_COUNTS; i++ {
-			fileResp, _ := Client.UploadFile([]byte("data"), A_3.Id, "test"+strconv.Itoa(i))
-			fileId := fileResp.FileInfos[0].Id
+	t.Run("tesing merge channel", func(t *testing.T) {
 
-			Client.CreatePost(&model.Post{
-				ChannelId: A_3.Id,
-				Message:   strconv.Itoa(i) + ":with files",
-				FileIds:   model.StringArray{fileId},
-			})
+		uc, err := th.Server.Store.Channel().GetChannels("", X.Id, true, 0)
+                require.NoError(t,err,"Get direct channel error")
 
-			time.Sleep(1 * time.Second)
+		SetPolicy(SimplePolicy{
+			period: 2,
+			team: SimpleSpecificPolicy{
+				B.Id: 1,
+				C.Id: 0,
+			},
+			channel: SimpleSpecificPolicy{
+
+				A_1.Id: 1,
+				A_2.Id: 0,
+				B_1.Id: 2,
+				B_2.Id: 0,
+				C_1.Id: 3,
+				C_2.Id: 0,
+			},
+			user: SimpleSpecificPolicy{
+				W.Username: 1,
+			},
+		})
+		prObj, err := New(th.App)
+                require.NoError(t,err,"should call New succussfully")
+                
+		type temppl struct {
+			name   string
+			id     string
+			period time.Duration
 		}
+		func(pl []temppl) {
 
-		// posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
-		// mlog.Debug(fmt.Sprintf("General case created: %v", posts.ToJson()))
+			for _, ch := range pl {
 
-		Prune(th.App)
+				pa, ok := prObj.merged[ch.id]
+				assert.Equal(t, true, ok, fmt.Sprintf("%s should be found", ch.name))
+				assert.Equal(t, ch.period, pa, fmt.Sprintf("%s period wrong", ch.name))
+
+			}
+
+		}(
+			[]temppl{
+				{"A_1", A_1.Id, 1},
+				{"A_2", A_2.Id, 0},
+				{"B_1", B_1.Id, 2},
+				{"B_2", B_2.Id, 0},
+				{"C_1", C_1.Id, 3},
+				{"C_2", C_2.Id, 0},
+				{"B_3", B_3.Id, 1},
+				{"C_3", C_3.Id, 0},
+				{"X", []*model.Channel(*uc)[0].Id, 1},
+				{"X", []*model.Channel(*uc)[1].Id, 1},
+				{"X", []*model.Channel(*uc)[2].Id, 1},
+			},
+		)
 
 	})
+
+// 	t.Run("testing gernal case", func(t *testing.T) {
+// 
+// 		const POSTS_COUNTS = 7
+// 
+// 		U.Password = "Pa$$word11"
+// 		LoginWithClient(U, Client)
+// 
+// 		for i := 0; i < POSTS_COUNTS; i++ {
+// 			fileResp, _ := Client.UploadFile([]byte("data"), A_3.Id, "test"+strconv.Itoa(i))
+// 			fileId := fileResp.FileInfos[0].Id
+// 
+// 			Client.CreatePost(&model.Post{
+// 				ChannelId: A_3.Id,
+// 				Message:   strconv.Itoa(i) + ":with files",
+// 				FileIds:   model.StringArray{fileId},
+// 			})
+// 
+// 			time.Sleep(1 * time.Second)
+// 		}
+// 
+// 		// posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
+// 		// mlog.Debug(fmt.Sprintf("General case created: %v", posts.ToJson()))
+// 
+// 		prObj.Prune()
+// 
+// 	})
 	// 	t.Run("testing root message", func(t *testing.T) {
 	//
 	// 		const POSTS_COUNTS = 7
