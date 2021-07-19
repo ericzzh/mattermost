@@ -2,6 +2,7 @@ package retention
 
 import (
 	"fmt"
+	"strconv"
 	// "strconv"
 	"testing"
 	"time"
@@ -16,6 +17,8 @@ import (
 	// 	// "github.com/mattermost/mattermost-server/v5/store/storetest"
 	// 	// "github.com/mattermost/mattermost-server/v5/store/sqlstore"
 	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v5/shared/mlog"
+
 	// 	// "github.com/mattermost/mattermost-server/v5/store"
 	"github.com/mattermost/mattermost-server/v5/api4"
 	"github.com/stretchr/testify/assert"
@@ -135,92 +138,177 @@ func TestRetention(t *testing.T) {
 	CreateDmChannel(th, Z, X)
 	CreateDmChannel(th, Z, W)
 
-	t.Run("tesing merge channel", func(t *testing.T) {
+        _ = mlog.Debug
+        _ = fmt.Sprintf
 
-		uc, err := th.Server.Store.Channel().GetChannels("", X.Id, true, 0)
-                require.NoError(t,err,"Get direct channel error")
+// 	t.Run("tesing merge channel", func(t *testing.T) {
+// 
+// 		uc, err := th.Server.Store.Channel().GetChannels("", X.Id, true, 0)
+// 		require.NoError(t, err, "Get direct channel error")
+// 
+// 		SetPolicy(SimplePolicy{
+// 			period: 1,
+// 			team: SimpleSpecificPolicy{
+// 				B.Id: 2,
+// 				C.Id: 3,
+// 			},
+// 			channel: SimpleSpecificPolicy{
+// 
+// 				A_1.Id: 4,
+// 				A_2.Id: 5,
+// 				B_1.Id: 6,
+// 				B_2.Id: 7,
+// 				C_1.Id: 8,
+// 				C_2.Id: 9,
+// 			},
+// 			user: SimpleSpecificPolicy{
+// 				X.Username: 10,
+// 			},
+// 		})
+// 		prObj, err := New(th.App)
+// 		require.NoError(t, err, "should call New succussfully")
+// 
+// 		type temppl struct {
+// 			name   string
+// 			id     string
+// 			period time.Duration
+// 		}
+// 		func(pl []temppl) {
+// 
+// 			for _, ch := range pl {
+// 
+// 				pa, ok := prObj.merged[ch.id]
+// 				assert.Equal(t, true, ok, fmt.Sprintf("%s should be found", ch.name))
+// 				assert.Equal(t, ch.period, pa, fmt.Sprintf("%s period wrong", ch.name))
+// 
+// 			}
+// 
+// 		}(
+// 			[]temppl{
+// 				{"A_1", A_1.Id, 4},
+// 				{"A_2", A_2.Id, 5},
+// 				{"B_1", B_1.Id, 6},
+// 				{"B_2", B_2.Id, 7},
+// 				{"C_1", C_1.Id, 8},
+// 				{"C_2", C_2.Id, 9},
+// 				{"B_3", B_3.Id, 2},
+// 				{"C_3", C_3.Id, 3},
+// 				{"X", []*model.Channel(*uc)[0].Id, 10},
+// 				{"X", []*model.Channel(*uc)[1].Id, 10},
+// 				{"X", []*model.Channel(*uc)[2].Id, 10},
+// 			},
+// 		)
+// 
+// 	})
 
-		SetPolicy(SimplePolicy{
-			period: 2,
-			team: SimpleSpecificPolicy{
-				B.Id: 1,
-				C.Id: 0,
-			},
-			channel: SimpleSpecificPolicy{
+	t.Run("testing prune root posts and some file", func(t *testing.T) {
 
-				A_1.Id: 1,
-				A_2.Id: 0,
-				B_1.Id: 2,
-				B_2.Id: 0,
-				C_1.Id: 3,
-				C_2.Id: 0,
-			},
-			user: SimpleSpecificPolicy{
-				W.Username: 1,
-			},
-		})
-		prObj, err := New(th.App)
-                require.NoError(t,err,"should call New succussfully")
-                
-		type temppl struct {
-			name   string
-			id     string
-			period time.Duration
-		}
-		func(pl []temppl) {
+		const period = 7
+		// SetPolicy(SimplePolicy{
+		// 	period: 5,
+		// })
 
-			for _, ch := range pl {
+		const POSTS_COUNTS = 7
 
-				pa, ok := prObj.merged[ch.id]
-				assert.Equal(t, true, ok, fmt.Sprintf("%s should be found", ch.name))
-				assert.Equal(t, ch.period, pa, fmt.Sprintf("%s period wrong", ch.name))
+		U.Password = "Pa$$word11"
+		LoginWithClient(U, Client)
+
+		fileinfos_backup := []*model.FileInfo{}
+
+		for i := 0; i < POSTS_COUNTS; i++ {
+			var fileId string
+			if i%2 == 0 {
+				fileResp, _ := Client.UploadFile([]byte("data"), A_3.Id, "test"+strconv.Itoa(i))
+				fileId = fileResp.FileInfos[0].Id
+                                require.NotEmptyf(t, fileId, "upload file should not be empty.", fileResp.ToJson())
 
 			}
 
-		}(
-			[]temppl{
-				{"A_1", A_1.Id, 1},
-				{"A_2", A_2.Id, 0},
-				{"B_1", B_1.Id, 2},
-				{"B_2", B_2.Id, 0},
-				{"C_1", C_1.Id, 3},
-				{"C_2", C_2.Id, 0},
-				{"B_3", B_3.Id, 1},
-				{"C_3", C_3.Id, 0},
-				{"X", []*model.Channel(*uc)[0].Id, 1},
-				{"X", []*model.Channel(*uc)[1].Id, 1},
-				{"X", []*model.Channel(*uc)[2].Id, 1},
-			},
-		)
+			post, _ := Client.CreatePost(&model.Post{
+				ChannelId: A_3.Id,
+				Message:   strconv.Itoa(i) + ":with files",
+				FileIds:   model.StringArray{fileId},
+			})
+
+			post, err := th.App.GetSinglePost(post.Id)
+                        require.Nilf(t, err, "post should be there.. %v, but there is err:  %v", post.ToJson(), err.ToJson())
+
+			if i%2 == 0 {
+				fileinfo, err := th.App.GetFileInfosForPost((*post).Id, true)
+				require.Nil(t, err)
+				fileinfos_backup = append(fileinfos_backup, fileinfo...)
+			}
+
+			time.Sleep(1 * time.Second)
+		}
+
+
+		pr, err := New(th.App)
+		require.NoError(t, err)
+
+		endTime := model.GetMillisForTime(time.Now().Add(-time.Second * period))
+		err = pr.pruneActions([]string{A_3.Id}, nil, period)
+		require.NoError(t, err, "there should be no errors after first pruning.")
+
+		posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
+		require.Greaterf(t, len(posts.Posts),0, "there should be some posts after first pruning.")
+
+		for _, post := range posts.Posts {
+			assert.Greater(t, post.UpdateAt, endTime, "left posts should be greater than pruning end time")
+			if len([]string(post.FileIds)) != 0 {
+				fileinfos, err := th.App.GetFileInfosForPost(post.Id, true)
+				require.Nil(t, err)
+				for _, fileinfo := range fileinfos {
+					b, _ := th.App.FileExists(fileinfo.Path)
+					assert.Equalf(t, true, b, "file: %v should exist.", fileinfo.Path)
+
+				}
+			}
+		}
+
+                time.Sleep(3 * time.Second)
+		err = pr.pruneActions([]string{A_3.Id}, nil, 1)
+		require.NoError(t, err, "there should be no errors after second pruning.")
+
+		for _, fileinfo := range fileinfos_backup {
+
+			b, _ := th.App.FileExists(fileinfo.Path)
+			assert.Equalf(t, false, b, "file: %v should not exist after second pruning.", fileinfo.Path)
+
+		}
+
+                dirs, _ := th.App.ListDirectory(".")
+                assert.Equalf(t, 0, len(dirs), "there should be no directory after second pruncing. but....%v", dirs)
+
 
 	})
 
-// 	t.Run("testing gernal case", func(t *testing.T) {
-// 
-// 		const POSTS_COUNTS = 7
-// 
-// 		U.Password = "Pa$$word11"
-// 		LoginWithClient(U, Client)
-// 
-// 		for i := 0; i < POSTS_COUNTS; i++ {
-// 			fileResp, _ := Client.UploadFile([]byte("data"), A_3.Id, "test"+strconv.Itoa(i))
-// 			fileId := fileResp.FileInfos[0].Id
-// 
-// 			Client.CreatePost(&model.Post{
-// 				ChannelId: A_3.Id,
-// 				Message:   strconv.Itoa(i) + ":with files",
-// 				FileIds:   model.StringArray{fileId},
-// 			})
-// 
-// 			time.Sleep(1 * time.Second)
-// 		}
-// 
-// 		// posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
-// 		// mlog.Debug(fmt.Sprintf("General case created: %v", posts.ToJson()))
-// 
-// 		prObj.Prune()
-// 
-// 	})
+	// 	t.Run("testing gernal case", func(t *testing.T) {
+	//
+	// 		const POSTS_COUNTS = 7
+	//
+	// 		U.Password = "Pa$$word11"
+	// 		LoginWithClient(U, Client)
+	//
+	// 		for i := 0; i < POSTS_COUNTS; i++ {
+	// 			fileResp, _ := Client.UploadFile([]byte("data"), A_3.Id, "test"+strconv.Itoa(i))
+	// 			fileId := fileResp.FileInfos[0].Id
+	//
+	// 			Client.CreatePost(&model.Post{
+	// 				ChannelId: A_3.Id,
+	// 				Message:   strconv.Itoa(i) + ":with files",
+	// 				FileIds:   model.StringArray{fileId},
+	// 			})
+	//
+	// 			time.Sleep(1 * time.Second)
+	// 		}
+	//
+	// 		// posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
+	// 		// mlog.Debug(fmt.Sprintf("General case created: %v", posts.ToJson()))
+	//
+	// 		prObj.Prune()
+	//
+	// 	})
 	// 	t.Run("testing root message", func(t *testing.T) {
 	//
 	// 		const POSTS_COUNTS = 7

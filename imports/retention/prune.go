@@ -56,7 +56,7 @@ func mergeToChannels(srv *app.Server) (mergedChMap SimpleSpecificPolicy, err err
 
 	// user directed channel
 	for u, p := range policy.user {
-                usr, err := srv.Store.User().GetByUsername(u)
+		usr, err := srv.Store.User().GetByUsername(u)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Prune: get user(%s) id wrong.", u)
 		}
@@ -105,19 +105,10 @@ func (pr *Prune) Prune() error {
 
 	for chid, p := range pr.merged {
 
-		if p != 0 {
-
-			if err := pr.pruneActions(false, []string{chid}, nil, p); err != nil {
-				return errors.Wrapf(err, "failed to call pruneActions().")
-			}
-			mlog.Debug(fmt.Sprintf("Prune: specific case, channel: %s, completed.", chid))
-		} else {
-			// Only clean deleted record.
-			if err := pr.pruneActions(true, []string{chid}, nil, p); err != nil {
-				return errors.Wrapf(err, "failed to call pruneActions().")
-			}
-			mlog.Debug(fmt.Sprintf("Prune: pemanet case only cleaning deleted posts, channel: %s, completed.", chid))
+		if err := pr.pruneActions([]string{chid}, nil, p); err != nil {
+			return errors.Wrapf(err, "failed to call pruneActions().")
 		}
+		mlog.Debug(fmt.Sprintf("Prune: specific case, channel: %s, completed.", chid))
 
 	}
 	return nil
@@ -126,7 +117,7 @@ func (pr *Prune) Prune() error {
 func (pr *Prune) pruneGeneral() error {
 	ex := pr.fetchAllChannelIds(pr.merged)
 
-	if err := pr.pruneActions(false, nil, ex, policy.period); err != nil {
+	if err := pr.pruneActions(nil, ex, policy.period); err != nil {
 		return errors.Wrapf(err, "failed to call pruneActions().")
 	}
 
@@ -142,14 +133,14 @@ func (pr *Prune) fetchAllChannelIds(chsMap SimpleSpecificPolicy) (chIds []string
 }
 
 // TO DO: Only select necessary fields
-func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Duration) error {
+func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) error {
 
 	ss := pr.sqlstore
 
 	now := time.Now()
 	endTime := model.GetMillisForTime(now.Add(-time.Second * period))
 
-	mlog.Debug(fmt.Sprintf("Prune: endTime: %v", endTime))
+	mlog.Info(fmt.Sprintf("Prune: endTime: %v", endTime))
 
 	//----------------------------------------
 	//   Root post fetching
@@ -171,7 +162,7 @@ func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Du
 
 	sql = sql.Where("UpdateAt < ?", endTime)
 
-	if del {
+	if period == 0 {
 		// Only clean the Deleted post in  pemanent channls
 		// To follow the root -> thread logic, we only fetch the deleted root
 		// and threads fetch follows the same logic
@@ -201,7 +192,7 @@ func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Du
 		return errors.Wrapf(err, "failed to fetch all the candidate roots.")
 	}
 
-	mlog.Debug(fmt.Sprintf("Prune: cadidate root counts :%v", len(roots)))
+	mlog.Info(fmt.Sprintf("Prune: cadidate root counts :%v", len(roots)))
 
 	//----------------------------------------
 	//   Thread posts fetching
@@ -236,7 +227,7 @@ func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Du
 		return errors.Wrapf(err, "failed to fetch candidate threads.")
 	}
 
-	mlog.Debug(fmt.Sprintf("Prune: cadidate threads counts :%v", len(threadsCand)))
+	mlog.Info(fmt.Sprintf("Prune: cadidate threads counts :%v", len(threadsCand)))
 
 	// *** May the following logic is never executed, because the Pinned Thread will update root UpdateAt too
 	//     but we leave them as comment out for some possible future change to be easy ***
@@ -290,8 +281,8 @@ func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Du
 
 	}
 
-	mlog.Debug(fmt.Sprintf("Prune: found %d FileInfo Ids", len(fileIdMap)))
-	mlog.Debug(fmt.Sprintf("Prune: found %d Reaction post Ids", len(reactionMap)))
+	mlog.Info(fmt.Sprintf("Prune: found %d FileInfo Ids", len(fileIdMap)))
+	mlog.Info(fmt.Sprintf("Prune: found %d Reaction post Ids", len(reactionMap)))
 
 	// Save all file information
 	// to delay to last to delete. because if fail to delete posts, there is a chance to roll back.
@@ -313,7 +304,7 @@ func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Du
 		return errors.Wrapf(err, "failed to fetch file ids.")
 	}
 
-	mlog.Debug(fmt.Sprintf("Prune: file id counts :%v", len(fileInfos)))
+	mlog.Info(fmt.Sprintf("Prune: file id counts :%v", len(fileInfos)))
 
 	//----------------------------------------
 	//  Deleting process
@@ -349,22 +340,22 @@ func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Du
 	//****************************************
 	// ThreadMembership deletion
 	//****************************************
-	query, args, err = builder.Delete("ThreadMemberShips").Where(sq.Eq{"Id": rootsid}).ToSql()
+	query, args, err = builder.Delete("ThreadMemberships").Where(sq.Eq{"PostId": rootsid}).ToSql()
 
 	if err != nil {
-		return errors.Wrapf(err, "failed to build delete from ThreadMemberShips query string.")
+		return errors.Wrapf(err, "failed to build delete from ThreadMemberships query string.")
 	}
 
 	if _, err = transaction.Exec(query, args...); err != nil {
-		return errors.Wrapf(err, "failed to execute delete from ThreadMemberShips query")
+		return errors.Wrapf(err, "failed to execute delete from ThreadMemberships query")
 	}
 
-	mlog.Info("Prune: ThreadMemberShips table was cleaned.")
+	mlog.Info("Prune: ThreadMemberships table was cleaned.")
 
 	//****************************************
 	// Threads deletion
 	//****************************************
-	query, args, err = builder.Delete("Threads").Where(sq.Eq{"Id": rootsid}).ToSql()
+	query, args, err = builder.Delete("Threads").Where(sq.Eq{"PostId": rootsid}).ToSql()
 
 	if err != nil {
 		return errors.Wrapf(err, "failed to build delete from Threads query string.")
@@ -419,9 +410,9 @@ func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Du
 		return errors.Wrapf(err, "failed to execute delete from Posts query")
 	}
 
-	mlog.Info("Prune: Posts table was cleaned.")
+	mlog.Info(fmt.Sprintf("Prune: %v posts were deleted from table Posts.", len(delIds)))
 
-	if err = transaction.Commit(); err != nil {
+	if err := transaction.Commit(); err != nil {
 		return errors.Wrap(err, "commit_transaction")
 	}
 
@@ -433,7 +424,7 @@ func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Du
 	for _, fileInfo := range fileInfos {
 		// the Dir of the path is the file id ,every file should have a individual id
 		path := filepath.Dir(fileInfo.Path)
-		if err = pr.app.RemoveDirectory(path); err != nil {
+		if err := pr.app.RemoveDirectory(path); err != nil {
 			mlog.Error(fmt.Sprintf("Prune: failed to delete file %s", path), mlog.Err(err))
 		}
 
@@ -445,22 +436,32 @@ func (pr *Prune) pruneActions(del bool, ch []string, ex []string, period time.Du
 				break
 			}
 
-			fs, err := pr.app.ListDirectory(path)
-			if err = pr.app.RemoveDirectory(path); err != nil {
-				mlog.Error(fmt.Sprintf("Prune: failed to delete file %s", path), mlog.Err(err))
-			}
-			if len(fs) == 0 {
-				pr.app.RemoveDirectory(path)
+			if fs, err := pr.app.ListDirectory(path); err != nil {
+				mlog.Error(fmt.Sprintf("Prune: failed to list directory %s", path), mlog.Err(err))
+                                break
 			} else {
-				break
+
+				if len(fs) == 0 {
+					if err := pr.app.RemoveDirectory(path); err != nil {
+						mlog.Error(fmt.Sprintf("Prune: failed to delete file %s", path), mlog.Err(err))
+					}
+				} else {
+					break
+				}
 			}
+
 		}
 	}
+
+	mlog.Info("Prune: files was cleaned.")
 
 	for chId := range chMap {
 		pr.srv.Store.Channel().InvalidatePinnedPostCount(chId)
 		pr.srv.Store.Post().InvalidateLastPostTimeCache(chId)
 	}
+
+	mlog.Info("Prune: invalidudate cache completed.")
+
 
 	return nil
 
