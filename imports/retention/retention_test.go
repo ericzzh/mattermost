@@ -287,7 +287,7 @@ func TestRetention(t *testing.T) {
 		require.NoError(t, err)
 
 		endTime := model.GetMillisForTime(time.Now().Add(-time.Second * period))
-		err = pr.pruneActions([]string{A_3.Id}, nil, period)
+		stats, err := pr.pruneActions([]string{A_3.Id}, nil, period)
 		require.NoError(t, err, "there should be no errors after first pruning.")
 
 		posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
@@ -321,7 +321,7 @@ func TestRetention(t *testing.T) {
 		}
 
 		time.Sleep(3 * time.Second)
-		err = pr.pruneActions([]string{A_3.Id}, nil, 1)
+		stat2, err := pr.pruneActions([]string{A_3.Id}, nil, 1)
 		require.NoError(t, err, "there should be no errors after second pruning.")
 
 		posts, err = th.App.GetPosts(A_3.Id, 0, 100)
@@ -339,6 +339,21 @@ func TestRetention(t *testing.T) {
 		dirs, err := th.App.ListDirectory(".")
 		require.Nil(t, err, "expected no error")
 		assert.Equalf(t, 0, len(dirs), "there should be no directory after second pruncing. but....%v", dirs)
+
+                // +1 system message
+		assert.Equalf(t, 8, stats.OrgRoots+stat2.OrgRoots, "original(true) root is not correct")
+		assert.Equalf(t, 0, stats.NonOrgRoots+stat2.NonOrgRoots, "non-original root is not correct")
+		assert.Equalf(t, 0, stats.DeletedOrgRoots+stat2.DeletedOrgRoots, "deleted original root is not correct")
+		assert.Equalf(t, 0, stats.Pinned+stat2.Pinned, "pinned original root(including thread) is not correct")
+		assert.Equalf(t, 8, stats.PruneOrgRoots+stat2.PruneOrgRoots, "prune original root is not correct")
+		assert.Equalf(t, 1, stats.System+stat2.System, "system original root is not correct")
+		assert.Equalf(t, 0, stats.Threads+stat2.Threads, "threads is not correct")
+		assert.Equalf(t, 0, stats.Db_reactions+stat2.Db_reactions, "deleted from Reactions is not correct")
+		assert.Equalf(t, 0, stats.Db_threadMem+stat2.Db_threadMem, "deleted from ThreadMemberships is not correct")
+		assert.Equalf(t, 0, stats.Db_threads+stat2.Db_threads, "deleted from Threads is not correct")
+		assert.Equalf(t, 4, stats.Db_fileInfo+stat2.Db_fileInfo, "deleted from FileInfo is not correct")
+		assert.Equalf(t, 0, stats.Db_preference+stat2.Db_preference, "deleted from Preference is not correct")
+		assert.Equalf(t, 8, stats.Db_posts+stat2.Db_posts, "deleted from Posts is not correct")
 
 	})
 
@@ -395,7 +410,7 @@ func TestRetention(t *testing.T) {
 		pr, err := New(th.App)
 		require.NoError(t, err)
 
-		err = pr.pruneActions([]string{A_3.Id}, nil, period)
+                stats, err := pr.pruneActions([]string{A_3.Id}, nil, period)
 		require.NoError(t, err, "there should be no errors after first pruning.")
 
 		posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
@@ -414,7 +429,7 @@ func TestRetention(t *testing.T) {
 		}
 
 		time.Sleep(3 * time.Second)
-		err = pr.pruneActions([]string{A_3.Id}, nil, 1)
+                stat2, err := pr.pruneActions([]string{A_3.Id}, nil, 1)
 		require.NoError(t, err, "there should be no errors after second pruning.")
 
 		posts, err = th.App.GetPosts(A_3.Id, 0, 100)
@@ -431,6 +446,20 @@ func TestRetention(t *testing.T) {
 		dirs, _ := th.App.ListDirectory(".")
 		assert.Equalf(t, 0, len(dirs), "there should be no directory after second pruncing. but....%v", dirs)
 
+                // +1 system message
+		assert.Equalf(t, 2, stats.OrgRoots+stat2.OrgRoots, "original(true) root is not correct")
+		assert.Equalf(t, 0, stats.NonOrgRoots+stat2.NonOrgRoots, "non-original root is not correct")
+		assert.Equalf(t, 0, stats.DeletedOrgRoots+stat2.DeletedOrgRoots, "deleted original root is not correct")
+		assert.Equalf(t, 0, stats.Pinned+stat2.Pinned, "pinned original root(including thread) is not correct")
+		assert.Equalf(t, 2, stats.PruneOrgRoots+stat2.PruneOrgRoots, "prune original root is not correct")
+		assert.Equalf(t, 1, stats.System+stat2.System, "system original root is not correct")
+		assert.Equalf(t, 6, stats.Threads+stat2.Threads, "threads is not correct")
+		assert.Equalf(t, 0, stats.Db_reactions+stat2.Db_reactions, "deleted from Reactions is not correct")
+		assert.Equalf(t, 1, stats.Db_threadMem+stat2.Db_threadMem, "deleted from ThreadMemberships is not correct")
+		assert.Equalf(t, 1, stats.Db_threads+stat2.Db_threads, "deleted from Threads is not correct")
+		assert.Equalf(t, 3, stats.Db_fileInfo+stat2.Db_fileInfo, "deleted from FileInfo is not correct")
+		assert.Equalf(t, 0, stats.Db_preference+stat2.Db_preference, "deleted from Preference is not correct")
+		assert.Equalf(t, 8, stats.Db_posts+stat2.Db_posts, "deleted from Posts is not correct")
 	})
 
 	t.Run("testing prune root pinned posts", func(t *testing.T) {
@@ -459,14 +488,79 @@ func TestRetention(t *testing.T) {
 		pr, err := New(th.App)
 		require.NoError(t, err)
 
-		err = pr.pruneActions([]string{A_3.Id}, nil, 1)
+                stats, err := pr.pruneActions([]string{A_3.Id}, nil, 1)
 		require.NoError(t, err, "there should be no errors after first pruning.")
 
 		posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
 		assert.GreaterOrEqualf(t, len(posts.Posts), 1, "pinned post should not be delete.")
 
+                // +1 system message
+		assert.Equalf(t, 2, stats.OrgRoots, "original(true) root is not correct")
+		assert.Equalf(t, 1, stats.NonOrgRoots, "non-original root is not correct")
+		assert.Equalf(t, 0, stats.DeletedOrgRoots, "deleted original root is not correct")
+		assert.Equalf(t, 1, stats.Pinned, "pinned original root(including thread) is not correct")
+		assert.Equalf(t, 1, stats.PruneOrgRoots, "prune original root is not correct")
+		assert.Equalf(t, 1, stats.System, "system original root is not correct")
+		assert.Equalf(t, 0, stats.Threads, "threads is not correct")
+		assert.Equalf(t, 0, stats.Db_reactions, "deleted from Reactions is not correct")
+		assert.Equalf(t, 0, stats.Db_threadMem, "deleted from ThreadMemberships is not correct")
+		assert.Equalf(t, 0, stats.Db_threads, "deleted from Threads is not correct")
+		assert.Equalf(t, 0, stats.Db_fileInfo, "deleted from FileInfo is not correct")
+		assert.Equalf(t, 0, stats.Db_preference, "deleted from Preference is not correct")
+		assert.Equalf(t, 1, stats.Db_posts, "deleted from Posts is not correct")
 	})
 
+	t.Run("testing prune root unpinned posts", func(t *testing.T) {
+
+		A := th.CreateTeam()
+		th.LinkUserToTeam(U, A)
+		A_3 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_PRIVATE, A.Id)
+		th.App.AddUserToChannel(U, A_3, false)
+
+		U.Password = "Pa$$word11"
+		LoginWithClient(U, Client)
+
+		post, resp := Client.CreatePost(&model.Post{
+			ChannelId: A_3.Id,
+			Message:   "pinned root message",
+		})
+
+		require.Nil(t, resp.Error, "expected no error")
+
+		b, resp := Client.PinPost(post.Id)
+		require.Nil(t, resp.Error, "expected no error")
+		require.Equalf(t, true, b, "pin should be sucessful.")
+
+		b, resp = Client.UnpinPost(post.Id)
+		require.Nil(t, resp.Error, "expected no error")
+		require.Equalf(t, true, b, "unpin should be sucessful.")
+
+		time.Sleep(2 * time.Second)
+
+		pr, err := New(th.App)
+		require.NoError(t, err)
+
+                stats, err := pr.pruneActions([]string{A_3.Id}, nil, 1)
+		require.NoError(t, err, "there should be no errors after first pruning.")
+
+		posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
+		assert.Equalf(t, len(posts.Posts), 0, "unpinned post should  be delete.")
+
+                // +1 system message
+		assert.Equalf(t, 2, stats.OrgRoots, "original(true) root is not correct")
+		assert.Equalf(t, 2, stats.NonOrgRoots, "non-original root is not correct")
+		assert.Equalf(t, 0, stats.DeletedOrgRoots, "deleted original root is not correct")
+		assert.Equalf(t, 0, stats.Pinned, "pinned original root(including thread) is not correct")
+		assert.Equalf(t, 2, stats.PruneOrgRoots, "prune original root is not correct")
+		assert.Equalf(t, 1, stats.System, "system original root is not correct")
+		assert.Equalf(t, 0, stats.Threads, "threads is not correct")
+		assert.Equalf(t, 0, stats.Db_reactions, "deleted from Reactions is not correct")
+		assert.Equalf(t, 0, stats.Db_threadMem, "deleted from ThreadMemberships is not correct")
+		assert.Equalf(t, 0, stats.Db_threads, "deleted from Threads is not correct")
+		assert.Equalf(t, 0, stats.Db_fileInfo, "deleted from FileInfo is not correct")
+		assert.Equalf(t, 0, stats.Db_preference, "deleted from Preference is not correct")
+		assert.Equalf(t, 4, stats.Db_posts, "deleted from Posts is not correct")
+	})
 	t.Run("testing prune thread pinned posts", func(t *testing.T) {
 
 		A := th.CreateTeam()
@@ -490,17 +584,104 @@ func TestRetention(t *testing.T) {
 		})
 		require.Nil(t, resp.Error, "expected no error")
 
+		thread, resp := Client.CreatePost(&model.Post{
+			ChannelId: A_3.Id,
+			RootId:    root.Id,
+		})
+		require.Nil(t, resp.Error, "expected no error")
+
+		b, resp := Client.PinPost(thread.Id)
+		require.Nil(t, resp.Error, "expected no error")
+		require.Equalf(t, true, b, "pin should be sucessful.")
+
 		time.Sleep(2 * time.Second)
 
 		pr, err := New(th.App)
 		require.NoError(t, err)
 
-		err = pr.pruneActions([]string{A_3.Id}, nil, 1)
+                stats, err := pr.pruneActions([]string{A_3.Id}, nil, 1)
 		require.NoError(t, err, "there should be no errors after first pruning.")
 
 		posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
-		fmt.Println(posts.ToJson())
 		assert.GreaterOrEqualf(t, len(posts.Posts), 1, "pinned threads and their family should not be delete.")
+
+		assert.Equalf(t, 2, stats.OrgRoots, "original(true) root is not correct")
+		assert.Equalf(t, 0, stats.NonOrgRoots, "non-original root is not correct")
+		assert.Equalf(t, 0, stats.DeletedOrgRoots, "deleted original root is not correct")
+		assert.Equalf(t, 1, stats.Pinned, "pinned original root(including thread) is not correct")
+		assert.Equalf(t, 1, stats.PruneOrgRoots, "prune original root is not correct")
+		assert.Equalf(t, 1, stats.System, "system original root is not correct")
+		assert.Equalf(t, 0, stats.Threads, "threads is not correct")
+		assert.Equalf(t, 0, stats.Db_reactions, "deleted from Reactions is not correct")
+		assert.Equalf(t, 0, stats.Db_threadMem, "deleted from ThreadMemberships is not correct")
+		assert.Equalf(t, 0, stats.Db_threads, "deleted from Threads is not correct")
+		assert.Equalf(t, 0, stats.Db_fileInfo, "deleted from FileInfo is not correct")
+		assert.Equalf(t, 0, stats.Db_preference, "deleted from Preference is not correct")
+		assert.Equalf(t, 1, stats.Db_posts, "deleted from Posts is not correct")
+
+	})
+
+	t.Run("testing prune thread unpinned posts", func(t *testing.T) {
+
+		A := th.CreateTeam()
+		th.LinkUserToTeam(U, A)
+		A_3 := th.CreateChannelWithClientAndTeam(Client, model.CHANNEL_PRIVATE, A.Id)
+		th.App.AddUserToChannel(U, A_3, false)
+
+		U.Password = "Pa$$word11"
+		LoginWithClient(U, Client)
+
+		root, resp := Client.CreatePost(&model.Post{
+			ChannelId: A_3.Id,
+			Message:   "root message with threads",
+		})
+
+		require.Nil(t, resp.Error, "expected no error")
+
+		_, resp = Client.CreatePost(&model.Post{
+			ChannelId: A_3.Id,
+			RootId:    root.Id,
+		})
+		require.Nil(t, resp.Error, "expected no error")
+
+		thread, resp := Client.CreatePost(&model.Post{
+			ChannelId: A_3.Id,
+			RootId:    root.Id,
+		})
+		require.Nil(t, resp.Error, "expected no error")
+
+		b, resp := Client.PinPost(thread.Id)
+		require.Nil(t, resp.Error, "expected no error")
+		require.Equalf(t, true, b, "pin should be sucessful.")
+
+		b, resp = Client.UnpinPost(thread.Id)
+		require.Nil(t, resp.Error, "expected no error")
+		require.Equalf(t, true, b, "pin should be sucessful.")
+
+		time.Sleep(2 * time.Second)
+
+		pr, err := New(th.App)
+		require.NoError(t, err)
+
+                stats, err := pr.pruneActions([]string{A_3.Id}, nil, 1)
+		require.NoError(t, err, "there should be no errors after first pruning.")
+
+		posts, _ := th.App.GetPosts(A_3.Id, 0, 100)
+		assert.GreaterOrEqualf(t, len(posts.Posts), 1, "pinned threads and their family should not be delete.")
+
+		assert.Equalf(t, 2, stats.OrgRoots, "original(true) root is not correct")
+		assert.Equalf(t, 0, stats.NonOrgRoots, "non-original root is not correct")
+		assert.Equalf(t, 0, stats.DeletedOrgRoots, "deleted original root is not correct")
+		assert.Equalf(t, 0, stats.Pinned, "pinned original root(including thread) is not correct")
+		assert.Equalf(t, 2, stats.PruneOrgRoots, "prune original root is not correct")
+		assert.Equalf(t, 1, stats.System, "system original root is not correct")
+		assert.Equalf(t, 3, stats.Threads, "threads is not correct")
+		assert.Equalf(t, 0, stats.Db_reactions, "deleted from Reactions is not correct")
+		assert.Equalf(t, 1, stats.Db_threadMem, "deleted from ThreadMemberships is not correct")
+		assert.Equalf(t, 1, stats.Db_threads, "deleted from Threads is not correct")
+		assert.Equalf(t, 0, stats.Db_fileInfo, "deleted from FileInfo is not correct")
+		assert.Equalf(t, 0, stats.Db_preference, "deleted from Preference is not correct")
+		assert.Equalf(t, 1, stats.Db_posts, "deleted from Posts is not correct")
 
 	})
 }
