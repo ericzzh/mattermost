@@ -151,7 +151,7 @@ func (pr *Prune) fetchAllChannelIds(chsMap SimpleSpecificPolicy) (chIds []string
 // TO DO: Only select necessary fields
 func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*Stats, error) {
 
-        var  st Stats
+	var st Stats
 
 	_ = json.MarshalIndent // for debug
 	ss := pr.sqlstore
@@ -198,8 +198,8 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 
 	mlog.Info(fmt.Sprintf("Prune: %v root posts were selected from Posts.", len(roots)))
 
-	//         tmp, _ := json.MarshalIndent(roots, "", "\t")
-	// fmt.Printf("*** Debug root sql result %v",string(tmp) )
+	// tmp, _ := json.MarshalIndent(roots, "", "\t")
+	// fmt.Printf("*** Debug root sql result %v", string(tmp))
 
 	//A tree to express the structure of a post family
 	type rootTree struct {
@@ -250,6 +250,7 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 
 			rootDict.deleted[root.Id] = rt
 			// if the true root is marked as deleted, it should be a prune root
+                        // no matter permanent or not
 			rootDict.prune[root.Id] = rt
 
 		} else if root.IsPinned {
@@ -322,22 +323,22 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 		}
 	}
 
-        st.OrgRoots = len(rootDict.trueroots)
-	mlog.Info(fmt.Sprintf("Prune: %v true root posts.", st.OrgRoots ))
+	st.OrgRoots = len(rootDict.trueroots)
+	mlog.Info(fmt.Sprintf("Prune: %v true root posts.", st.OrgRoots))
 
-        st.DeletedOrgRoots = len(rootDict.deleted)
-	mlog.Info(fmt.Sprintf("Prune: %v true deleted root posts.", st.DeletedOrgRoots ))
+	st.DeletedOrgRoots = len(rootDict.deleted)
+	mlog.Info(fmt.Sprintf("Prune: %v true deleted root posts.", st.DeletedOrgRoots))
 
-        st.NonOrgRoots = cntSubroots
-	mlog.Info(fmt.Sprintf("Prune: %v non-originial root posts.", st.NonOrgRoots ))
+	st.NonOrgRoots = cntSubroots
+	mlog.Info(fmt.Sprintf("Prune: %v non-originial root posts.", st.NonOrgRoots))
 
-        st.System = len(rootDict.system)
-	mlog.Info(fmt.Sprintf("Prune: %v system root posts.", st.System ))
+	st.System = len(rootDict.system)
+	mlog.Info(fmt.Sprintf("Prune: %v system root posts.", st.System))
 
-        st.Pinned = len(rootDict.pinned)
+	st.Pinned = len(rootDict.pinned)
 	mlog.Info(fmt.Sprintf("Prune: %v pinned root(including pinned threads) posts.", st.Pinned))
 
-        st.PruneOrgRoots = len(rootDict.prune)
+	st.PruneOrgRoots = len(rootDict.prune)
 	mlog.Info(fmt.Sprintf("Prune: %v prune roots", st.PruneOrgRoots))
 
 	var cntThread int
@@ -345,7 +346,7 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 		cntThread = cntThread + len(r.threads)
 	}
 
-        st.Threads = cntThread
+	st.Threads = cntThread
 	mlog.Info(fmt.Sprintf("Prune: %v prune threads", st.Threads))
 
 	// we need to compute trueRootsId again, because the data meybe modified
@@ -464,7 +465,7 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 	}
 
 	rc, _ := sqlres.RowsAffected()
-        st.Db_reactions = int(rc)
+	st.Db_reactions = int(rc)
 	mlog.Info(fmt.Sprintf("Prune: Reaction table was pruned. Effected rows: %v", rc))
 
 	//****************************************
@@ -482,7 +483,7 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 	}
 
 	rc, _ = sqlres.RowsAffected()
-        st.Db_threadMem = int(rc)
+	st.Db_threadMem = int(rc)
 	mlog.Info(fmt.Sprintf("Prune: ThreadMemberships table was pruned. Effected rows: %v", rc))
 
 	//****************************************
@@ -499,7 +500,7 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 	}
 
 	rc, _ = sqlres.RowsAffected()
-        st.Db_threads = int(rc)
+	st.Db_threads = int(rc)
 	mlog.Info(fmt.Sprintf("Prune: Threads table was pruned. Effected rows: %v", rc))
 
 	//****************************************
@@ -516,7 +517,7 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 	}
 
 	rc, _ = sqlres.RowsAffected()
-        st.Db_fileInfo = int(rc)
+	st.Db_fileInfo = int(rc)
 	mlog.Info(fmt.Sprintf("Prune: FileInfo table was pruned. Effected rows: %v", rc))
 
 	//****************************************
@@ -533,7 +534,7 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 	}
 
 	rc, _ = sqlres.RowsAffected()
-        st.Db_preference = int(rc)
+	st.Db_preference = int(rc)
 	mlog.Info(fmt.Sprintf("Prune: Preferences table was pruned. Effected rows: %v", rc))
 
 	//****************************************
@@ -550,7 +551,7 @@ func (pr *Prune) pruneActions(ch []string, ex []string, period time.Duration) (*
 	}
 
 	rc, _ = sqlres.RowsAffected()
-        st.Db_posts = int(rc)
+	st.Db_posts = int(rc)
 	mlog.Info(fmt.Sprintf("Prune: Posts table were pruned. Effected rows: %v", rc))
 
 	if err := transaction.Commit(); err != nil {
