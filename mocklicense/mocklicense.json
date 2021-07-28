@@ -41,6 +41,6 @@
         "remote_cluster_service" : true,
         "future_features" : true
     },
-    "sku_name": "mocksku",
-    "sku_short_name" :"mockshort"
+    "sku_name": "professional",
+    "sku_short_name" :"professional"
 }

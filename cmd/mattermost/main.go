@@ -25,11 +25,6 @@ import (
 	_ "github.com/mattermost/mattermost-server/v5/model/gitlab"
 	// Enterprise Imports
 	_ "github.com/mattermost/mattermost-server/v5/imports"
-
-        // ZZH ADD Begin
-        // import mocklicense
-	_ "github.com/mattermost/mattermost-server/v5/mocklicense"
-        // ZZH ADD End
 )
 
 func main() {
