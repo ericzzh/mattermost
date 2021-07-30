@@ -4,7 +4,10 @@ FROM alpine:3.12
 ENV PATH="/mattermost/bin:${PATH}"
 ARG PUID=2000
 ARG PGID=2000
-ARG MM_PACKAGE="https://releases.mattermost.com/5.36.1/mattermost-5.36.1-linux-amd64.tar.gz?src=docker"
+# ZZH Mod Begin
+# ARG MM_PACKAGE="https://releases.mattermost.com/5.36.1/mattermost-5.36.1-linux-amd64.tar.gz?src=docker"
+ARG MM_PACKAGE="https://github.com/ericzzh/mattermost-server/releases/download/vz5.37/mattermost-team-linux-amd64.tar.gz"
+# ZZH Mod End 
 
 
 # Install some needed packages
@@ -25,7 +28,10 @@ RUN apk add --no-cache \
 
 # Get Mattermost
 RUN mkdir -p /mattermost/data /mattermost/plugins /mattermost/client/plugins \
-  && if [ ! -z "$MM_PACKAGE" ]; then curl $MM_PACKAGE | tar -xvz ; \
+  # ZZH Mod Begin
+  # && if [ ! -z "$MM_PACKAGE" ]; then curl $MM_PACKAGE | tar -xvz ; \
+  && if [ ! -z "$MM_PACKAGE" ]; then curl -L $MM_PACKAGE | tar -xvz ; \
+  # ZZH Mod End
   else echo "please set the MM_PACKAGE" ; fi \
   && addgroup -g ${PGID} mattermost \
   && adduser -D -u ${PUID} -G mattermost -h /mattermost -D mattermost \
