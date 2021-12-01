@@ -12,6 +12,8 @@ import (
 
 	"github.com/mattermost/mattermost-server/v5/model"
 	"github.com/mattermost/mattermost-server/v5/shared/mlog"
+
+        "fmt"
 )
 
 const DeletePostsBatchSize = 500
@@ -42,9 +44,9 @@ func (b *BleveEngine) SearchPosts(channels *model.ChannelList, searchParams []*m
 	var filters []query.Query
 	var notFilters []query.Query
 
-	typeQ := bleve.NewTermQuery("")
-	typeQ.SetField("Type")
-	filters = append(filters, typeQ)
+	// typeQ := bleve.NewTermQuery("")
+	// typeQ.SetField("Type")
+	// filters = append(filters, typeQ)
 
 	for i, params := range searchParams {
 		var termOperator query.MatchQueryOperator = query.MatchQueryOperatorAnd
@@ -223,6 +225,8 @@ func (b *BleveEngine) SearchPosts(channels *model.ChannelList, searchParams []*m
 	for _, r := range results.Hits {
 		postIds = append(postIds, r.ID)
 	}
+
+        fmt.Printf("********* Debug **********: Searched postid: %v\n", len(postIds))
 
 	return postIds, matches, nil
 }
